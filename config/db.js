@@ -5,14 +5,14 @@ let memoryServer;
 
 const connectDB = async () => {
   const candidates = [
-    process.env.MONGODB_URI,
-    'mongodb://127.0.0.1:27017/stockmonitor'
+    'mongodb://127.0.0.1:27017/stockmonitor',
+    process.env.MONGODB_URI
   ].filter(Boolean);
 
   for (const uri of candidates) {
     try {
       await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 4000,
         family: 4
       });
       const label = uri.includes('127.0.0.1') ? 'local' : 'remote';

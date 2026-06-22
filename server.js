@@ -3,6 +3,7 @@ import express, { json } from 'express';
 import cors from 'cors';
 import { schedule } from 'node-cron';
 import YahooFinance from 'yahoo-finance2';
+import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 import Stock from './models/Stock.js';
 import Watchlist from './models/Watchlist.js';
@@ -15,6 +16,10 @@ const app = express();
 app.use(cors());
 app.use(json());
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, db: mongoose.connection.readyState === 1 });
+});
+
 const normalizeTicker = (ticker = '') => ticker.trim().toUpperCase();
 
 const isWeekday = () => {
@@ -25,7 +30,6 @@ const isWeekday = () => {
 const saveWatchlistQuote = async (ticker, metadata = {}, quote = null) => {
   const q = quote || await yahooFinance.quote(ticker);
   if (!q?.regularMarketPrice) throw new Error('Price unavailable');
-  if (q.marketState !== 'REGULAR') return null;
 
   const summary = await yahooFinance.quoteSummary(ticker, {
     modules: ['summaryDetail', 'defaultKeyStatistics']
@@ -102,11 +106,20 @@ const fetchUniverseMovers = async () => {
 };
 
 const fetchScreenerMovers = async (scrIds, count = 50) => {
-  const result = await yahooFinance.screener({ scrIds, count, region: 'IN', lang: 'en-IN' });
-  return (result.quotes || [])
-    .filter((q) => isIndianSymbol(q.symbol))
-    .map(screenerToMover)
-    .filter((s) => s.changePercent != null && s.price != null);
+  try {
+    const result = await yahooFinance.screener({
+      scrIds,
+      count,
+      region: 'IN',
+      lang: 'en-IN'
+    }, { validateResult: false });
+    return (result.quotes || [])
+      .filter((q) => isIndianSymbol(q.symbol))
+      .map(screenerToMover)
+      .filter((s) => s.changePercent != null && s.price != null);
+  } catch {
+    return [];
+  }
 };
 
 app.get('/api/stocks/movers', async (_req, res) => {
@@ -124,15 +137,17 @@ app.get('/api/stocks/movers', async (_req, res) => {
     }
 
     const universe = await fetchUniverseMovers();
-    res.json({
+    return res.json({
       gainers: gainerQuotes.length >= 3 ? gainerQuotes.slice(0, 3) : universe.gainers,
       losers: loserQuotes.length >= 3 ? loserQuotes.slice(0, 3) : universe.losers
     });
   } catch (error) {
+    console.error('Movers error:', error.message);
     try {
-      res.json(await fetchUniverseMovers());
-    } catch {
-      res.status(500).json({ message: error.message });
+      return res.json(await fetchUniverseMovers());
+    } catch (err2) {
+      console.error('Universe movers error:', err2.message);
+      return res.status(500).json({ message: error.message });
     }
   }
 });
@@ -233,6 +248,9 @@ app.delete('/api/watchlist/:ticker', async (req, res) => {
 app.get('/api/stocks/:ticker', async (req, res) => {
   try {
     const ticker = normalizeTicker(req.params.ticker);
+    if (ticker === 'SEARCH' || ticker === 'MOVERS') {
+      return res.status(404).json({ message: 'Not found' });
+    }
     const period1 = new Date();
     period1.setFullYear(period1.getFullYear() - 1);
 
@@ -280,12 +298,15 @@ app.get('/api/stocks/:ticker', async (req, res) => {
 });
 
 const start = async () => {
-  await connectDB();
-
-  schedule('*/30 * * * *', fetchAndStoreWatchlist);
-
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+
+  try {
+    await connectDB();
+    schedule('*/30 * * * *', fetchAndStoreWatchlist);
+  } catch (error) {
+    console.error('MongoDB unavailable — watchlist APIs may fail:', error.message);
+  }
 };
 
 start().catch((error) => {
