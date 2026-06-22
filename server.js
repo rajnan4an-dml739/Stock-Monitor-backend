@@ -284,7 +284,7 @@ const start = async () => {
 
   schedule('*/30 * * * *', fetchAndStoreWatchlist);
 
-  const PORT = process.env.PORT || 5000;
+  const PORT = process.env.PORT || "https://stock-monitor-backend-dw2y.onrender.com/";
   app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
 };
 
