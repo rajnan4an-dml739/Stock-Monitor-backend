@@ -1,32 +1,32 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+// import { MongoMemoryServer } from 'mongodb-memory-server';
 
-let memoryServer;
+// let memoryServer;
 
 const connectDB = async () => {
-  const candidates = [
-    'mongodb://127.0.0.1:27017/stockmonitor',
-    process.env.MONGODB_URI
-  ].filter(Boolean);
-
-  for (const uri of candidates) {
-    try {
-      await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 4000,
-        family: 4
-      });
-      const label = uri.includes('127.0.0.1') ? 'local' : 'remote';
-      console.log(`MongoDB Connected (${label})`);
-      return;
-    } catch (error) {
-      console.warn(`MongoDB connection failed: ${error.message}`);
-      await mongoose.disconnect().catch(() => {});
+  try {
+    if (!process.env.MONGODB_URI) {
+      throw new Error("MONGODB_URI is not defined");
     }
+
+    console.log("Connecting to MongoDB Atlas...");
+
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      family: 4,
+    });
+
+    console.log("MongoDB Connected Successfully");
+  } catch (error) {
+    console.error("MongoDB Connection Failed:");
+    console.error(error.message);
+
+    process.exit(1);
   }
 
-  memoryServer = await MongoMemoryServer.create();
-  await mongoose.connect(memoryServer.getUri());
-  console.log('MongoDB Connected (in-memory fallback)');
+//   memoryServer = await MongoMemoryServer.create();
+// //   await mongoose.connect(memoryServer.getUri());
+// //   console.log('MongoDB Connected (in-memory fallback)');
 };
 
 export default connectDB;
