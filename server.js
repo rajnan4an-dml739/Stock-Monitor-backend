@@ -13,8 +13,16 @@ config();
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 const app = express();
 
-app.use(cors());
-app.use(json());
+app.use(cors({
+
+    origin: [
+      "https://stock-monitor-frontend.vercel.app",
+      "http://localhost:5173"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+}));
+app.use(express.json());
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, db: mongoose.connection.readyState === 1 });
