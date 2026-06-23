@@ -254,17 +254,27 @@ app.get('/api/stocks/:ticker', async (req, res) => {
     const period1 = new Date();
     period1.setFullYear(period1.getFullYear() - 1);
 
-    const [quote, summary, history, watchlisted, snapshots] = await Promise.all([
-      yahooFinance.quote(ticker),
-      yahooFinance.quoteSummary(ticker, {
-        modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData']
-      }).catch(() => ({})),
-      yahooFinance.chart(ticker, { period1, interval: '1d' }).catch(() => ({ quotes: [] })),
-      Watchlist.exists({ ticker }),
-      latestSnapshots([ticker])
-    ]);
+    let quote = null;
+    let summary = {};
+    let history = { quotes: [] };
+    let watchlisted = false;
+    let snapshots = [];
+
+    try {
+      quote = await yahooFinance.quote(ticker);
+    } catch (error) {
+      return res.status(404).json({ message: error.message || 'Stock not found' });
+    }
 
     if (!quote?.regularMarketPrice) return res.status(404).json({ message: 'Stock not found' });
+
+    summary = await yahooFinance.quoteSummary(ticker, {
+      modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData']
+    }).catch(() => ({}));
+
+    history = await yahooFinance.chart(ticker, { period1, interval: '1d' }).catch(() => ({ quotes: [] }));
+    watchlisted = await Watchlist.exists({ ticker }).catch(() => false);
+    snapshots = await latestSnapshots([ticker]).catch(() => []);
 
     const details = summary || {};
 
